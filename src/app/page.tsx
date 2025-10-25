@@ -2,7 +2,31 @@
 
 import React, { useState, useEffect } from 'react';
 
-const initialData = {
+// Type definitions for the data structure
+interface GiftItem {
+  gift: string;
+  price: number;
+  bought: boolean;
+  image?: string | null;
+}
+
+interface Recipient {
+  items: GiftItem[];
+}
+
+interface Category {
+  [key: string]: Recipient;
+}
+
+interface AppData {
+  adults: Category;
+  kids: Category;
+  stockings: Category;
+  work: Category;
+  home: Category;
+}
+
+const initialData: AppData = {
   adults: {
     "Natahsa": { items: [{ gift: "Owala - Spring Revival", price: 21.0, bought: true }] },
     "Josh": { items: [{ gift: "Owala - Black 32 oz", price: 14.21, bought: true }] },
@@ -62,7 +86,6 @@ const initialData = {
       { gift: "Hair Ties (Girls)", price: 2.57, bought: true },
       { gift: "Boys Something: Wireless Mouse", price: 0.0, bought: false }
     ] },
-    // Add more kids' stockings here as needed from your sheet
     "Zachariah": { items: [
       { gift: "Playing Cards: All Black", price: 0.01, bought: true },
       { gift: "3D Print: Jointed Lizzard", price: 3.27, bought: true },
@@ -72,7 +95,7 @@ const initialData = {
       { gift: "Bandaids", price: 1.0, bought: true },
       { gift: "Boys Something", price: 5.39, bought: true }
     ] },
-    // ... expand for other kids
+    // Add more as needed
   },
   work: {
     "Scott": { items: [{ gift: "Gift", price: 5.0, bought: false }] },
@@ -94,68 +117,68 @@ const initialData = {
 };
 
 export default function Home() {
-  const [currentPage, setCurrentPage] = useState('overview');
+  const [currentPage, setCurrentPage] = useState<keyof AppData | 'overview' | 'search'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
-  const [appData, setAppData] = useState(initialData);
+  const [appData, setAppData] = useState<AppData>(initialData);
 
   useEffect(() => {
     const saved = localStorage.getItem('christmasData');
-    if (saved) setAppData(JSON.parse(saved));
+    if (saved) setAppData(JSON.parse(saved) as AppData);
   }, []);
 
   useEffect(() => {
     localStorage.setItem('christmasData', JSON.stringify(appData));
   }, [appData]);
 
-  const getRecipientTotal = (recipientName: string, category: string) => {
-    const items = appData[category as keyof typeof appData]?.[recipientName]?.items || [];
+  const getRecipientTotal = (recipientName: string, category: keyof AppData): number => {
+    const items = appData[category]?.[recipientName]?.items || [];
     return items.reduce((sum, item) => sum + (item.bought ? item.price : 0), 0);
   };
 
-  const updateItem = (category: string, recipientName: string, index: number, field: string, value: any) => {
+  const updateItem = (category: keyof AppData, recipientName: string, index: number, field: keyof GiftItem | 'image', value: any) => {
     setAppData(prev => ({
       ...prev,
       [category]: {
-        ...prev[category as keyof typeof prev],
+        ...prev[category],
         [recipientName]: {
-          ...prev[category as keyof typeof prev]?.[recipientName],
-          items: prev[category as keyof typeof prev]?.[recipientName]?.items.map((item, i) =>
+          ...prev[category][recipientName],
+          items: prev[category][recipientName].items.map((item, i) =>
             i === index ? { ...item, [field]: field === 'bought' ? !!value : value } : item
-          ) || []
+          )
         }
       }
     }));
   };
 
-  const addItem = (category: string, recipientName: string, newGift: string, newPrice: number, newBought: boolean) => {
+  const addItem = (category: keyof AppData, recipientName: string, newGift: string, newPrice: number, newBought: boolean) => {
     setAppData(prev => ({
       ...prev,
       [category]: {
-        ...prev[category as keyof typeof prev],
+        ...prev[category],
         [recipientName]: {
-          ...prev[category as keyof typeof prev]?.[recipientName],
-          items: [...(prev[category as keyof typeof prev]?.[recipientName]?.items || []), { gift: newGift, price: newPrice, bought: newBought, image: null }]
+          ...prev[category][recipientName],
+          items: [...(prev[category][recipientName]?.items || []), { gift: newGift, price: newPrice, bought: newBought, image: null }]
         }
       }
     }));
   };
 
-  const removeItem = (category: string, recipientName: string, index: number) => {
+  const removeItem = (category: keyof AppData, recipientName: string, index: number) => {
     setAppData(prev => ({
       ...prev,
       [category]: {
-        ...prev[category as keyof typeof prev],
+        ...prev[category],
         [recipientName]: {
-          ...prev[category as keyof typeof prev]?.[recipientName],
-          items: prev[category as keyof typeof prev]?.[recipientName]?.items.filter((_, i) => i !== index) || []
+          ...prev[category][recipientName],
+          items: prev[category][recipientName].items.filter((_, i) => i !== index)
         }
       }
     }));
   };
 
-  const Recipient = ({ recipientName, category }: { recipientName: string; category: string }) => {
+  const Recipient = ({ recipientName, category }: { recipientName: string; category: keyof AppData }) => {
     const total = getRecipientTotal(recipientName, category);
-    const items = appData[category as keyof typeof appData]?.[recipientName]?.items || [];
+    const items = appData[category]?.[recipientName]?.items || [];
     const [newGift, setNewGift] = useState('');
     const [newPrice, setNewPrice] = useState(0);
     const [newBought, setNewBought] = useState(false);
@@ -256,13 +279,12 @@ export default function Home() {
       );
     }
     if (page === 'search') {
-      // Simple search across all
       const query = searchQuery.toLowerCase();
-      const results = [];
+      const results: { name: string; category: keyof AppData }[] = [];
       Object.entries(appData).forEach(([category, catData]) => {
         Object.keys(catData).forEach((name) => {
           if (name.toLowerCase().includes(query)) {
-            results.push({ name, category });
+            results.push({ name, category: category as keyof AppData });
           }
         });
       });
@@ -273,13 +295,14 @@ export default function Home() {
         </div>
       );
     }
-    const categoryData = appData[page as keyof typeof appData] || {};
+    const category = page as keyof AppData;
+    const categoryData = appData[category] || {};
     const keys = Object.keys(categoryData).sort();
     return (
       <div className="p-6">
         <h2 className="text-2xl font-bold mb-4 capitalize">{page.replace('-', ' ')}</h2>
         {keys.length === 0 && <p className="text-gray-500">No items yet. Add some!</p>}
-        {keys.map((name) => <Recipient key={`${page}-${name}`} recipientName={name} category={page} />)}
+        {keys.map((name) => <Recipient key={`${page}-${name}`} recipientName={name} category={category} />)}
         {page === 'home' && (
           <div className="mt-4">
             <input type="text" placeholder="New home recipient" id="new-home-name" className="mr-2 p-2 border rounded" />
